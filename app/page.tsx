@@ -4,6 +4,7 @@ import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import { supabase } from "@/utils/supabase";
 
 type Submission = {
+  id: string;
   content: string;
   created_at: string;
 };
@@ -13,6 +14,8 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmissions, setShowSubmissions] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
   const { user } = useUser();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,7 +55,7 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from('submissions')
-        .select('content, created_at')
+        .select('id, content, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -61,6 +64,51 @@ export default function Home() {
     } catch (error) {
       console.error("Error fetching submissions:", error);
       alert("Failed to fetch submissions. Please try again.");
+    }
+  };
+
+  const handleEdit = async (id: string) => {
+    try {
+      console.log('Attempting to edit submission:', id, editValue);
+      const { error, data } = await supabase
+        .from('submissions')
+        .update({ content: editValue })
+        .eq('id', id)
+        .eq('user_id', user?.id)
+        .select();
+
+      console.log('Edit response:', { error, data });
+
+      if (error) throw error;
+      
+      setEditingId(null);
+      fetchSubmissions();
+      alert('Successfully updated submission!');
+    } catch (error) {
+      console.error("Error updating submission:", error);
+      alert("Failed to update submission. Please try again.");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this submission?")) return;
+
+    try {
+      console.log('Attempting to delete submission:', id);
+      const { error } = await supabase
+        .from('submissions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+      
+      console.log('Successfully deleted submission:', id);
+      fetchSubmissions();
+      alert('Successfully deleted submission!');
+    } catch (error) {
+      console.error("Error deleting submission:", error);
+      alert("Failed to delete submission. Please try again.");
     }
   };
 
@@ -114,15 +162,66 @@ export default function Home() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {submissions.map((submission, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{submission.content}</td>
+                    <tr key={submission.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {index + 1}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingId === submission.id ? (
+                          <input
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded-md"
+                            autoFocus
+                          />
+                        ) : (
+                          submission.content
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(submission.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right space-x-2">
+                        {editingId === submission.id ? (
+                          <>
+                            <button
+                              onClick={() => handleEdit(submission.id)}
+                              className="text-green-600 hover:text-green-900"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="text-gray-600 hover:text-gray-900"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingId(submission.id);
+                                setEditValue(submission.content);
+                              }}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(submission.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
